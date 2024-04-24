@@ -3,15 +3,15 @@
 
 enum __attribute__((__packed__)) action
 {
-    Connect = __bswap_constant_32(0),
-    Announce = __bswap_constant_32(1),
-    Scrape = __bswap_constant_32(2), 
-    Error = __bswap_constant_32(3),
+    ActionConnect = __bswap_constant_32(0),
+    ActionAnnounce = __bswap_constant_32(1),
+    ActionScrape = __bswap_constant_32(2), 
+    ActionError = __bswap_constant_32(3),
 
     Max = INT32_MAX,
 };
 static_assert(sizeof(enum action) == 4, "invalid byte size");
-static_assert(Connect == 0b0, "invalid connect bits");
+static_assert(ActionConnect == 0b0, "invalid connect bits");
 
 typedef char infohash_t[20];
 static_assert(sizeof(infohash_t) == 20, "invalid byte size");
@@ -33,10 +33,10 @@ static_assert(sizeof(struct connect_req) == 16, "invalid byte size");
 
 enum __attribute__((__packed__)) announce_event
 {
-    None = __bswap_constant_32(0),
-    Completed = __bswap_constant_32(1),
-    Started = __bswap_constant_32(2),
-    Stopped = __bswap_constant_32(3),
+    EventNone = __bswap_constant_32(0),
+    EventCompleted = __bswap_constant_32(1),
+    EventStarted = __bswap_constant_32(2),
+    EventStopped = __bswap_constant_32(3),
 
     MAX = INT32_MAX,
 };

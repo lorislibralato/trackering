@@ -65,16 +65,18 @@ void tracker_init(struct tracker *trk, void *buf, unsigned int pages)
     tracker_init_buf_group(trk, RECV_BG_ENTRIES, BG_ID_RECV, RECV_BG_BUF_LEN);
 }
 
-void packet_sent(struct tracker *trk, struct op *op, struct io_uring_cqe *cqe)
+void packet_sent(void *ctx, struct op *op, struct io_uring_cqe *cqe)
 {
     struct op_send *send = container_of(op, struct op_send, op);
+    struct tracker* trk = ctx; 
 
     // deallocate the op (and the buffer) from the right size cache
     mm_pool_cache_put(&trk->mm, &trk->send_caches[send->cache_index], send);
 }
 
-void received_msg(struct tracker *trk, struct op *op, struct io_uring_cqe *cqe)
+void received_msg(void *ctx, struct op *op, struct io_uring_cqe *cqe)
 {
+    struct tracker* trk = ctx; 
     // op is embedded inside tracker, doesn't need deallocation
     assert(&trk->op_recv.op == op);
     struct op_recv *recv;
@@ -115,7 +117,7 @@ void received_msg(struct tracker *trk, struct op *op, struct io_uring_cqe *cqe)
 
     switch (req_hdr->action)
     {
-    case Connect:
+    case ActionConnect:
     {
         struct connect_req *req = req_hdr;
         struct connect_resp *resp;
@@ -132,24 +134,36 @@ void received_msg(struct tracker *trk, struct op *op, struct io_uring_cqe *cqe)
         send->cache_index = 0;
 
         resp = (void *)&send->buf;
-        resp->header.action = Connect;
+        resp->header.action = ActionConnect;
         resp->header.transaction_id = req->header.transaction_id;
         resp->connection_id = 0; // TODO: generate this
 
         memcpy(&send->addr, name, addr_size);
         // printf("packet from: %s\n", inet_ntoa(((struct sockaddr_in *)name)->sin_addr));
 
-        io_sendmsg(&trk->io, trk->fd, &send->buf, sizeof(resp), &send->addr, addr_size, &send->op, packet_sent);
+        io_sendto(&trk->io, trk->fd, &send->buf, sizeof(resp), &send->addr, addr_size, &send->op, packet_sent);
 
         break;
     }
-    case Announce:
+    case ActionAnnounce:
     {
         struct announce_req *req = req_hdr;
         struct announce_resp *resp;
 
+        // check connection id
+        if (!req->header.connection_id)
+        {
+            // TODO send error
+            goto cleanup;
+        }
+
         switch (req->event)
         {
+        case EventStarted:
+        case EventNone:
+        case EventCompleted:
+        case EventStopped:
+            break;
         default:
             break;
         }
@@ -159,16 +173,28 @@ void received_msg(struct tracker *trk, struct op *op, struct io_uring_cqe *cqe)
         send = mm_pool_cache_get(&trk->mm, &trk->send_caches[0]);
         assert(send);
 
+        resp = (void *)&send->buf;
+        resp->header.action = ActionAnnounce;
+        resp->header.transaction_id = req->header.transaction_id;
+        // TODO: remaining
+
         memcpy(&send->addr, name, addr_size);
 
-        io_sendmsg(&trk->io, trk->fd, &send->buf, sizeof(resp), &send->addr, addr_size, &send->op, packet_sent);
+        io_sendto(&trk->io, trk->fd, &send->buf, sizeof(resp), &send->addr, addr_size, &send->op, packet_sent);
         break;
     }
 
-    case Scrape:
+    case ActionScrape:
     {
         struct scrape_req *req = req_hdr;
         struct scrape_resp *resp;
+
+        // check connection id
+        if (!req->header.connection_id)
+        {
+            // TODO send error
+            goto cleanup;
+        }
 
         unsigned int payload_len = io_uring_recvmsg_payload_length(hdr, cqe->res, &recv->msg);
         unsigned int qty = (payload_len - sizeof(struct header_req)) / sizeof(req->torrents[0]);
@@ -176,7 +202,11 @@ void received_msg(struct tracker *trk, struct op *op, struct io_uring_cqe *cqe)
         send = mm_pool_cache_get(&trk->mm, &trk->send_caches[0]);
         assert(send);
 
-        io_sendmsg(&trk->io, trk->fd, &send->buf, sizeof(resp), &send->addr, addr_size, &send->op, packet_sent);
+        resp = (void *)&send->buf;
+        resp->header.action = ActionScrape;
+        resp->header.transaction_id = req->header.transaction_id;
+
+        io_sendto(&trk->io, trk->fd, &send->buf, sizeof(resp), &send->addr, addr_size, &send->op, packet_sent);
         break;
     }
 
@@ -196,7 +226,7 @@ void start_receiving(struct tracker *trk)
     // support both ipv4/6 lenght
     recv->msg.msg_namelen = sizeof(struct sockaddr_in6);
 
-    io_recvmsg_multi(&trk->io, trk->fd, BG_ID_RECV, &recv->msg, &recv->op, received_msg);
+    io_recvmsg_multi_bg(&trk->io, trk->fd, BG_ID_RECV, &recv->msg, &recv->op, received_msg);
 }
 
 int tracker_socket(struct tracker *trk)

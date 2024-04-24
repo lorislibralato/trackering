@@ -3,32 +3,32 @@
 #include <assert.h>
 #include "io.h"
 
-int io_init(struct io *io, struct io_options *options)
+int io_init(struct io *io, struct io_options *opt)
 {
     int ret;
 
     memset(&io->params, 0, sizeof(io->params));
-    io->params.sq_thread_idle = options->sq_idle;
-    io->params.cq_entries = options->entries << options->cqe_order;
+    io->params.sq_thread_idle = opt->sq_idle;
+    io->params.cq_entries = opt->entries << opt->cqe_order;
     io->params.flags = IORING_SETUP_SQPOLL | IORING_SETUP_NO_SQARRAY | IORING_SETUP_SINGLE_ISSUER | IORING_SETUP_CQSIZE;
 
-    if (options->sq_cpu != -1)
+    if (opt->sq_cpu != -1)
     {
         io->params.flags |= IORING_SETUP_SQ_AFF;
-        io->params.sq_thread_cpu = options->sq_cpu;
+        io->params.sq_thread_cpu = opt->sq_cpu;
     }
 
-    if (options->attach_wq != -1)
+    if (opt->attach_wq != -1)
     {
-        io->params.wq_fd = options->attach_wq;
+        io->params.wq_fd = opt->attach_wq;
         io->params.flags |= IORING_SETUP_ATTACH_WQ;
     }
 
-    ret = io_uring_queue_init_params(options->entries, &io->ring, &io->params);
+    ret = io_uring_queue_init_params(opt->entries, &io->ring, &io->params);
     if (ret)
         return ret;
 
-    if (options->use_direct_files)
+    if (opt->use_direct_files)
     {
         ret = io_uring_register_files_sparse(&io->ring, 16);
         return ret;
@@ -37,7 +37,7 @@ int io_init(struct io *io, struct io_options *options)
     return 0;
 }
 
-int io_tick(struct io *io, struct tracker *trk)
+int io_tick(struct io *io, void *ctx)
 {
     struct __kernel_timespec ts;
     struct io_uring_cqe *cqe;
@@ -65,7 +65,7 @@ int io_tick(struct io *io, struct tracker *trk)
         else
         {
             op = (struct op *)cqe->user_data;
-            op->callback(trk, op, cqe);
+            op->callback(ctx, op, cqe);
         }
 
         count++;
@@ -88,7 +88,7 @@ struct io_uring_sqe *io_prepare_sqe(struct io *io, struct op *op, op_callback_t 
     return sqe;
 }
 
-void io_recvmsg_multi(struct io *io, int fd, int bgid, struct msghdr *msg, struct op *op, op_callback_t callback)
+void io_recvmsg_multi_bg(struct io *io, int fd, int bgid, struct msghdr *msg, struct op *op, op_callback_t callback)
 {
     struct io_uring_sqe *sqe = io_prepare_sqe(io, op, callback);
     assert(sqe);
@@ -98,10 +98,31 @@ void io_recvmsg_multi(struct io *io, int fd, int bgid, struct msghdr *msg, struc
     sqe->buf_group = bgid;
 }
 
-void io_sendmsg(struct io *io, int fd, void *buf, unsigned int buf_len, struct sockaddr *addr, unsigned int addr_len, struct op *op, op_callback_t callback)
+void io_recv(struct io* io, int fd, void* buf, unsigned long len, struct op* op, op_callback_t callback) {
+    struct io_uring_sqe *sqe = io_prepare_sqe(io, op, callback);
+    assert(sqe);
+
+    io_uring_prep_recv(sqe, fd, buf, len, 0);
+}
+
+void io_sendto(struct io *io, int fd, void *buf, unsigned int buf_len, struct sockaddr *addr, unsigned int addr_len, struct op *op, op_callback_t callback)
 {
     struct io_uring_sqe *sqe = io_prepare_sqe(io, op, callback);
     assert(sqe);
 
     io_uring_prep_sendto(sqe, fd, buf, buf_len, 0, addr, addr_len);
+}
+
+void io_connect(struct io *io, int fd, struct sockaddr *addr, unsigned int addr_len, struct op *op, op_callback_t callback) {
+    struct io_uring_sqe *sqe = io_prepare_sqe(io, op, callback);
+    assert(sqe);
+
+    io_uring_prep_connect(sqe, fd, addr, addr_len);
+} 
+
+void io_send(struct io *io, int fd, void *buf, unsigned int buf_len, struct op *op, op_callback_t callback) {
+    struct io_uring_sqe *sqe = io_prepare_sqe(io, op, callback);
+    assert(sqe);
+
+    io_uring_prep_send(sqe, fd, buf, buf_len, 0);
 }

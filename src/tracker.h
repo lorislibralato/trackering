@@ -19,6 +19,26 @@ enum bufgroup_ids
 #define MIN_RESPONSE_ORDER (6)
 #define SEND_CACHE_COUNT (MAX_RESPONSE_ORDER - MIN_RESPONSE_ORDER + 1)
 
+struct op_recv
+{
+    struct op op;
+    struct msghdr msg;
+};
+
+struct op_send
+{
+    struct op op;
+    union
+    {
+        struct sockaddr addr;
+        struct sockaddr_in addr4;
+        struct sockaddr_in6 addr6;
+    };
+    char cache_index;
+    char buf[];
+};
+static_assert(sizeof(struct op_send) == 8 + 28 + 4, "");
+
 struct buf_group
 {
     struct io_uring_buf_ring *desc;
@@ -41,6 +61,5 @@ struct tracker
 void tracker_init(struct tracker *trk, void *buf, unsigned int pages);
 int tracker_tick(struct tracker *trk);
 void start_receiving(struct tracker *trk);
-void received_msg(struct tracker *trk, struct op *_op, struct io_uring_cqe *cqe);
 
 #endif // TRACKER_H
