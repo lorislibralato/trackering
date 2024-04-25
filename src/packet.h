@@ -5,7 +5,7 @@ enum __attribute__((__packed__)) action
 {
     ActionConnect = __bswap_constant_32(0),
     ActionAnnounce = __bswap_constant_32(1),
-    ActionScrape = __bswap_constant_32(2), 
+    ActionScrape = __bswap_constant_32(2),
     ActionError = __bswap_constant_32(3),
 
     Max = INT32_MAX,
@@ -13,7 +13,7 @@ enum __attribute__((__packed__)) action
 static_assert(sizeof(enum action) == 4, "invalid byte size");
 static_assert(ActionConnect == 0b0, "invalid connect bits");
 
-typedef char infohash_t[20];
+typedef unsigned char infohash_t[20];
 static_assert(sizeof(infohash_t) == 20, "invalid byte size");
 
 struct __attribute__((__packed__)) header_req
@@ -86,13 +86,24 @@ struct __attribute__((__packed__)) peer
 };
 static_assert(sizeof(struct peer) == 6, "invalid byte size");
 
+struct __attribute__((__packed__)) peer6
+{
+    __u128 address;
+    unsigned short port;
+};
+static_assert(sizeof(struct peer6) == 18, "invalid byte size");
+
 struct __attribute__((__packed__)) announce_resp
 {
     struct header_resp header;
     unsigned int interval;
     unsigned int leechers;
     unsigned int seeders;
-    struct peer peer[0];
+    union
+    {
+        struct peer peers[0];
+        struct peer6 peers6[0];
+    };
 };
 static_assert(sizeof(struct announce_resp) == 20, "invalid byte size");
 
