@@ -1,7 +1,7 @@
 CC = clang
 BUILD_DIR = build
 
-src_files = src/cache.c src/memory.c src/tracker.c src/io.c src/client.c
+src_files = src/cache.c src/memory.c src/tracker.c src/io.c src/client.c src/tree.c c-rbtree/src/c-rbtree.c
 obj_files = $(patsubst %.c, $(BUILD_DIR)/%.o,$(src_files)) 
 INCLUDES = -I$(BUILD_DIR)/include/liburing/ -I$(BUILD_DIR)/include/
 CFLAGS = -O3 -Wall -Wextra -march=native -ffunction-sections -flto $(INCLUDES)

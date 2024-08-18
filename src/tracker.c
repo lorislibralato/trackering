@@ -63,12 +63,14 @@ void tracker_init(struct tracker *trk, void *buf, unsigned int pages)
         cache_init(&trk->send_caches[i + 1], 1 << (MIN_RESPONSE_ORDER + i));
 
     tracker_init_buf_group(trk, RECV_BG_ENTRIES, BG_ID_RECV, RECV_BG_BUF_LEN);
+
+    tree_init(&trk->torrents, &trk->mm);
 }
 
 void packet_sent(void *ctx, struct op *op, struct io_uring_cqe *cqe)
 {
     struct op_send *send = container_of(op, struct op_send, op);
-    struct tracker* trk = ctx; 
+    struct tracker *trk = ctx;
 
     // deallocate the op (and the buffer) from the right size cache
     mm_pool_cache_put(&trk->mm, &trk->send_caches[send->cache_index], send);
@@ -76,7 +78,7 @@ void packet_sent(void *ctx, struct op *op, struct io_uring_cqe *cqe)
 
 void received_msg(void *ctx, struct op *op, struct io_uring_cqe *cqe)
 {
-    struct tracker* trk = ctx; 
+    struct tracker *trk = ctx;
     // op is embedded inside tracker, doesn't need deallocation
     assert(&trk->op_recv.op == op);
     struct op_recv *recv;

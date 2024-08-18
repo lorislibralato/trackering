@@ -4,6 +4,7 @@
 #include "memory.h"
 #include "cache.h"
 #include "io.h"
+#include "tree.h"
 #include "liburing.h"
 
 #define RECV_BG_BUF_LEN (2048)
@@ -55,6 +56,8 @@ struct tracker
 
     struct op_recv op_recv;
     struct buf_group group[BG_ID_COUNT];
+
+    struct tree torrents;
     int fd;
 };
 
